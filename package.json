@@ -1,0 +1,32 @@
+{
+  "name": "recruitflow-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RecruitFlow AI — intelligent recruitment & applicant tracking platform",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c green,magenta \"npm run dev -w @recruitflow/api\" \"npm run dev -w @recruitflow/web\"",
+    "dev:local": "concurrently -k -n db,api,web -c blue,green,magenta \"npm run db:local -w @recruitflow/api\" \"npm run dev -w @recruitflow/api\" \"npm run dev -w @recruitflow/web\"",
+    "db:local": "npm run db:local -w @recruitflow/api",
+    "db:migrate": "npm run db:migrate -w @recruitflow/api",
+    "db:seed": "npm run db:seed -w @recruitflow/api",
+    "db:reset": "npm run db:reset -w @recruitflow/api",
+    "worker": "npm run worker -w @recruitflow/api",
+    "build": "npm run build -w @recruitflow/api && npm run build -w @recruitflow/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,797 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// ───────────────────────────── Enums ─────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  RECRUITER
+  INTERVIEWER
+  CANDIDATE
+}
+
+enum MemberStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+}
+
+enum WorkMode {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
+enum ExperienceLevel {
+  ENTRY
+  MID
+  SENIOR
+  LEAD
+}
+
+enum SkillImportance {
+  REQUIRED
+  PREFERRED
+}
+
+enum StageType {
+  APPLIED
+  SCREENING
+  SHORTLISTED
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+}
+
+enum ApplicationStatus {
+  ACTIVE
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum CandidateSource {
+  LINKEDIN
+  CAREERS_PAGE
+  REFERRAL
+  INDEED
+  NAUKRI
+  AGENCY
+  OTHER
+}
+
+enum ProcessingStep {
+  UPLOADING
+  PROCESSING
+  EXTRACTING
+  PARSING
+  ANALYZING
+  COMPLETE
+  FAILED
+}
+
+enum InterviewType {
+  PHONE_SCREEN
+  TECHNICAL
+  SYSTEM_DESIGN
+  HR
+  CULTURE_FIT
+  FINAL
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum Recommendation {
+  STRONG_YES
+  PROCEED
+  HOLD
+  NO
+}
+
+enum PlanTier {
+  STARTER
+  GROWTH
+  BUSINESS
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum FileKind {
+  RESUME
+  LOGO
+  AVATAR
+  ATTACHMENT
+}
+
+enum FileStatus {
+  PENDING
+  UPLOADED
+  REJECTED
+}
+
+enum AiAnalysisKind {
+  RESUME_PARSE
+  MATCH
+  SUMMARY
+  JOB_DESCRIPTION
+  INTERVIEW_QUESTIONS
+  ASSISTANT
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+/// ─────────────────────────── Identity ───────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  firstName     String
+  lastName      String
+  avatarUrl     String?
+  phone         String?
+  timezone      String    @default("Asia/Kolkata")
+  isSuperAdmin  Boolean   @default(false)
+  emailVerified Boolean   @default(false)
+  lastActiveAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships         CompanyMember[]
+  sessions            Session[]
+  passwordResets      PasswordResetToken[]
+  notifications       Notification[]
+  candidateProfiles   Candidate[]            @relation("CandidateUser")
+  jobsCreated         Job[]                  @relation("JobCreator")
+  jobsManaged         Job[]                  @relation("JobHiringManager")
+  interviewsCreated   Interview[]            @relation("InterviewCreator")
+  interviewSlots      InterviewParticipant[]
+  feedback            InterviewFeedback[]
+  notes               CandidateNote[]
+  messages            Message[]
+  auditLogs           AuditLog[]
+  stageChanges        ApplicationStageHistory[]
+  invitationsSent     Invitation[]
+  talentPoolsCreated  TalentPool[]
+  talentPoolAdditions TalentPoolMember[]
+  filesUploaded       File[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String
+  userAgent        String?
+  ip               String?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+/// ─────────────────────────── Workspace ───────────────────────────
+
+model Company {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  industry            String?
+  size                String?
+  website             String?
+  location            String?
+  logoUrl             String?
+  about               String?
+  recruitingSpend     Int      @default(0)
+  onboardingCompleted Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  members        CompanyMember[]
+  invitations    Invitation[]
+  stages         CompanyStage[]
+  jobs           Job[]
+  candidates     Candidate[]
+  applications   Application[]
+  interviews     Interview[]
+  talentPools    TalentPool[]
+  notifications  Notification[]
+  messages       Message[]
+  emailTemplates EmailTemplate[]
+  auditLogs      AuditLog[]
+  subscription   Subscription?
+  payments       Payment[]
+  files          File[]
+  aiAnalyses     AiAnalysis[]
+
+  @@map("companies")
+}
+
+model CompanyMember {
+  id        String       @id @default(cuid())
+  companyId String
+  userId    String
+  role      Role
+  status    MemberStatus @default(ACTIVE)
+  title     String?
+  joinedAt  DateTime?    @default(now())
+  createdAt DateTime     @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([userId])
+  @@map("company_members")
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  companyId   String
+  email       String
+  role        Role
+  tokenHash   String    @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy User    @relation(fields: [invitedById], references: [id])
+
+  @@index([companyId])
+  @@map("invitations")
+}
+
+/// Company-level default hiring workflow; copied into each new job.
+model CompanyStage {
+  id        String    @id @default(cuid())
+  companyId String
+  name      String
+  type      StageType
+  order     Int
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, order])
+  @@map("company_stages")
+}
+
+/// ───────────────────────────── Jobs ─────────────────────────────
+
+model Job {
+  id               String          @id @default(cuid())
+  companyId        String
+  createdById      String
+  hiringManagerId  String?
+  title            String
+  slug             String          @unique
+  department       String
+  location         String
+  workMode         WorkMode
+  employmentType   EmploymentType
+  experienceLevel  ExperienceLevel
+  experienceMin    Int?
+  experienceMax    Int?
+  salaryMin        Int?
+  salaryMax        Int?
+  salaryCurrency   String          @default("INR")
+  openings         Int             @default(1)
+  description      Json
+  questions        Json            @default("[]")
+  status           JobStatus       @default(DRAFT)
+  publishedAt      DateTime?
+  closedAt         DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy     User          @relation("JobCreator", fields: [createdById], references: [id])
+  hiringManager User?         @relation("JobHiringManager", fields: [hiringManagerId], references: [id])
+  skills        JobSkill[]
+  stages        JobStage[]
+  applications  Application[]
+  aiAnalyses    AiAnalysis[]
+
+  @@index([companyId, status])
+  @@index([companyId, createdAt])
+  @@map("jobs")
+}
+
+model JobSkill {
+  id         String          @id @default(cuid())
+  jobId      String
+  name       String
+  years      Int?
+  importance SkillImportance @default(REQUIRED)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("job_skills")
+}
+
+/// Per-job hiring workflow (job_workflow_stages).
+model JobStage {
+  id    String    @id @default(cuid())
+  jobId String
+  name  String
+  type  StageType
+  order Int
+
+  job          Job                       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applications Application[]
+  historyFrom  ApplicationStageHistory[] @relation("HistoryFrom")
+  historyTo    ApplicationStageHistory[] @relation("HistoryTo")
+
+  @@index([jobId, order])
+  @@map("job_workflow_stages")
+}
+
+/// ─────────────────────────── Candidates ───────────────────────────
+
+model Candidate {
+  id               String          @id @default(cuid())
+  companyId        String
+  userId           String?
+  firstName        String
+  lastName         String
+  email            String
+  phone            String?
+  location         String?
+  headline         String?
+  currentCompany   String?
+  experienceYears  Float?
+  linkedinUrl      String?
+  githubUrl        String?
+  portfolioUrl     String?
+  avatarUrl        String?
+  summary          String?
+  source           CandidateSource @default(OTHER)
+  availability     String?
+  expectedSalary   Int?
+  noticePeriodDays Int?
+  tags             String[]        @default([])
+  certifications   String[]        @default([])
+  projects         Json            @default("[]")
+  resumeText       String?
+  parseStatus      ProcessingStep  @default(COMPLETE)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  company      Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user         User?                 @relation("CandidateUser", fields: [userId], references: [id], onDelete: SetNull)
+  skills       CandidateSkill[]
+  experiences  CandidateExperience[]
+  educations   CandidateEducation[]
+  applications Application[]
+  notes        CandidateNote[]
+  files        File[]
+  poolEntries  TalentPoolMember[]
+  messages     Message[]
+  aiAnalyses   AiAnalysis[]
+
+  @@unique([companyId, email])
+  @@index([companyId, createdAt])
+  @@index([email])
+  @@map("candidates")
+}
+
+model CandidateSkill {
+  id          String  @id @default(cuid())
+  candidateId String
+  name        String
+  years       Float?
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@index([name])
+  @@map("candidate_skills")
+}
+
+model CandidateExperience {
+  id          String    @id @default(cuid())
+  candidateId String
+  company     String
+  title       String
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@map("candidate_experience")
+}
+
+model CandidateEducation {
+  id          String  @id @default(cuid())
+  candidateId String
+  institution String
+  degree      String
+  field       String?
+  startYear   Int?
+  endYear     Int?
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@map("candidate_education")
+}
+
+model CandidateNote {
+  id          String   @id @default(cuid())
+  candidateId String
+  authorId    String
+  body        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+
+  @@index([candidateId, createdAt])
+  @@map("candidate_notes")
+}
+
+/// ────────────────────────── Applications ──────────────────────────
+
+model Application {
+  id              String            @id @default(cuid())
+  companyId       String
+  jobId           String
+  candidateId     String
+  stageId         String
+  stageType       StageType
+  status          ApplicationStatus @default(ACTIVE)
+  source          CandidateSource   @default(OTHER)
+  matchScore      Int?
+  answers         Json              @default("{}")
+  trackingToken   String?           @unique
+  rejectionReason String?
+  appliedAt       DateTime          @default(now())
+  stageChangedAt  DateTime          @default(now())
+  hiredAt         DateTime?
+  rejectedAt      DateTime?
+  updatedAt       DateTime          @updatedAt
+
+  company    Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job        Job                       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate  Candidate                 @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  stage      JobStage                  @relation(fields: [stageId], references: [id])
+  history    ApplicationStageHistory[]
+  interviews Interview[]
+  aiAnalyses AiAnalysis[]
+
+  @@unique([jobId, candidateId])
+  @@index([companyId, stageType])
+  @@index([companyId, appliedAt])
+  @@index([jobId, stageId])
+  @@map("applications")
+}
+
+model ApplicationStageHistory {
+  id            String    @id @default(cuid())
+  applicationId String
+  fromStageId   String?
+  toStageId     String
+  fromStageType StageType?
+  toStageType   StageType
+  changedById   String?
+  changedAt     DateTime  @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fromStage   JobStage?   @relation("HistoryFrom", fields: [fromStageId], references: [id], onDelete: SetNull)
+  toStage     JobStage    @relation("HistoryTo", fields: [toStageId], references: [id], onDelete: Cascade)
+  changedBy   User?       @relation(fields: [changedById], references: [id])
+
+  @@index([applicationId, changedAt])
+  @@map("application_stage_history")
+}
+
+/// ─────────────────────────── Interviews ───────────────────────────
+
+model Interview {
+  id            String          @id @default(cuid())
+  companyId     String
+  applicationId String
+  createdById   String
+  title         String
+  type          InterviewType
+  status        InterviewStatus @default(SCHEDULED)
+  startsAt      DateTime
+  durationMins  Int
+  meetingUrl    String?
+  location      String?
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  company      Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  application  Application            @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  createdBy    User                   @relation("InterviewCreator", fields: [createdById], references: [id])
+  participants InterviewParticipant[]
+  feedback     InterviewFeedback[]
+
+  @@index([companyId, startsAt])
+  @@index([applicationId])
+  @@map("interviews")
+}
+
+model InterviewParticipant {
+  id          String @id @default(cuid())
+  interviewId String
+  userId      String
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([interviewId, userId])
+  @@index([userId])
+  @@map("interview_participants")
+}
+
+model InterviewFeedback {
+  id             String         @id @default(cuid())
+  interviewId    String
+  interviewerId  String
+  ratings        Json
+  overallRating  Float
+  recommendation Recommendation
+  strengths      String?
+  concerns       String?
+  privateNotes   String?
+  submittedAt    DateTime       @default(now())
+
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  interviewer User      @relation(fields: [interviewerId], references: [id])
+
+  @@unique([interviewId, interviewerId])
+  @@map("interview_feedback")
+}
+
+/// ────────────────────────── Talent pools ──────────────────────────
+
+model TalentPool {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  color       String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User               @relation(fields: [createdById], references: [id])
+  members   TalentPoolMember[]
+
+  @@index([companyId])
+  @@map("talent_pools")
+}
+
+model TalentPoolMember {
+  id          String   @id @default(cuid())
+  poolId      String
+  candidateId String
+  addedById   String
+  addedAt     DateTime @default(now())
+
+  pool      TalentPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  candidate Candidate  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  addedBy   User       @relation(fields: [addedById], references: [id])
+
+  @@unique([poolId, candidateId])
+  @@map("talent_pool_members")
+}
+
+/// ───────────────────────── Communication ─────────────────────────
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  companyId String?
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  companyId   String
+  candidateId String
+  senderId    String
+  subject     String
+  body        String
+  templateKey String?
+  status      MessageStatus @default(QUEUED)
+  sentAt      DateTime?
+  createdAt   DateTime      @default(now())
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  sender    User      @relation(fields: [senderId], references: [id])
+
+  @@index([companyId, createdAt])
+  @@index([candidateId])
+  @@map("messages")
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  companyId String
+  key       String
+  name      String
+  subject   String
+  body      String
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, key])
+  @@map("email_templates")
+}
+
+/// ─────────────────────────── Platform ───────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  companyId  String?
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor   User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  companyId            String             @unique
+  plan                 PlanTier           @default(STARTER)
+  status               SubscriptionStatus @default(TRIALING)
+  currentPeriodStart   DateTime           @default(now())
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id              String    @id @default(cuid())
+  companyId       String
+  amount          Int
+  currency        String    @default("INR")
+  status          String
+  description     String
+  stripeInvoiceId String?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@map("payments")
+}
+
+model File {
+  id           String     @id @default(cuid())
+  companyId    String?
+  candidateId  String?
+  uploadedById String?
+  kind         FileKind
+  status       FileStatus @default(PENDING)
+  storageKey   String     @unique
+  filename     String
+  mimeType     String
+  size         Int
+  createdAt    DateTime   @default(now())
+
+  company    Company?   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  candidate  Candidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  uploadedBy User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([candidateId])
+  @@map("files")
+}
+
+model AiAnalysis {
+  id            String         @id @default(cuid())
+  companyId     String
+  kind          AiAnalysisKind
+  candidateId   String?
+  jobId         String?
+  applicationId String?
+  score         Int?
+  result        Json
+  engine        String
+  createdAt     DateTime       @default(now())
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  candidate   Candidate?   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  job         Job?         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  application Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, kind, createdAt])
+  @@index([candidateId, kind])
+  @@map("ai_analyses")
+}
